@@ -108,26 +108,25 @@ namespace BijectiveBurrowsWheeler
             var rnd1 = new Random(222);
             var rnd2 = new Random(222);
 
+            void Test(int size)
+            {
+                Benchmark.This(size + "L", () => { Program.Transform(WordGenerator(size, rnd1)); })
+                    .Against.This(size + "M", () => { Program.TransformMultiThreaded(WordGenerator(size, rnd2)); })
+                    .WithWarmup(100)
+                    .For(3).Seconds().PrintComparison();
+            }
 
-            Benchmark.This("10L", () => { Program.Transform(WordGenerator(10, rnd1)); })
-                .Against.This("10M", () => { Program.TransformMultiThreaded(WordGenerator(10, rnd2)); })
-                .WithWarmup(100)
-                .For(2).Seconds().PrintComparison();
-
-            Benchmark.This("100L", () => { Program.Transform(WordGenerator(100, rnd1)); })
-                .Against.This("100M", () => { Program.TransformMultiThreaded(WordGenerator(100, rnd2)); })
-                .WithWarmup(100)
-                .For(3).Seconds().PrintComparison();
-
-            Benchmark.This("1000L", () => { Program.Transform(WordGenerator(1000, rnd1)); })
-                .Against.This("1000M", () => { Program.TransformMultiThreaded(WordGenerator(1000, rnd2)); })
-                .WithWarmup(100)
-                .For(4).Seconds().PrintComparison();
-
-            Benchmark.This("10000L", () => { Program.Transform(WordGenerator(10000, rnd1)); })
-                .Against.This("10000M", () => { Program.TransformMultiThreaded(WordGenerator(10000, rnd2)); })
-                .WithWarmup(100)
-                .For(6).Seconds().PrintComparison();
+            Test(10);
+            Test(100);
+            Test(200);
+            Test(300);
+            Test(400);
+            Test(500);
+            Test(600);
+            Test(700);
+            Test(800);
+            Test(1000);
+            Test(10000);
         }
 
         private static int work;
@@ -138,16 +137,6 @@ namespace BijectiveBurrowsWheeler
             var finishedProcessing = new ManualResetEventSlim(false);
             var mergeQueue = new ConcurrentQueue<(int, int)[]>();
             var factorData = new List<(int, int)>();
-
-            void SortFactor(int index, int start, int length)
-            {
-                var sorted = Program.SortBucket(source, start, length, Enumerable.Range(0, length).ToArray(), 1)
-                    .Select(v => (index, v)).ToArray();
-
-                mergeQueue.Enqueue(sorted);
-
-                processQueue.Set();
-            }
 
             void ProcessSorted()
             {
@@ -240,7 +229,7 @@ namespace BijectiveBurrowsWheeler
                         var index = currentFactor;
                         Interlocked.Increment(ref Program.work);
 
-                        Task.Run(() => SortFactor(index, start, length));
+                        Task.Run(() => Program.SortFactor(index, start, length, source, mergeQueue, processQueue));
                         currentFactor++;
                         currentTermIndex += endIndex - startIndex;
                         endIndex = 1;
@@ -260,7 +249,7 @@ namespace BijectiveBurrowsWheeler
                     var index = currentFactor;
                     Interlocked.Increment(ref Program.work);
 
-                    Task.Run(() => SortFactor(index, start, length));
+                    Task.Run(() => Program.SortFactor(index, start, length, source, mergeQueue, processQueue));
                     currentFactor++;
                     currentTermIndex += endIndex - startIndex;
                 }
@@ -281,6 +270,18 @@ namespace BijectiveBurrowsWheeler
             }
             return new string(output);
         }
+
+        private static void SortFactor(int index, int start, int length, string source, ConcurrentQueue<(int, int)[]> mergeQueue, ManualResetEventSlim processQueue)
+        {
+            var sorted = Program.SortBucket(source, start, length, Enumerable.Range(0, length).ToArray(), 1)
+                .Select(v => (index, v))
+                .ToArray();
+
+            mergeQueue.Enqueue(sorted);
+
+            processQueue.Set();
+        }
+
         public static IEnumerable<int> SortBucket(string s, int start, int length, IList<int> bucket, int order)
         {
             var keyToPositionMap = new Dictionary<string, List<int>>(bucket.Count);
